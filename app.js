@@ -1,0 +1,45 @@
+const $=id=>document.getElementById(id), KEY="novel-desk-v02";
+const uid=()=>Math.random().toString(36).slice(2,10), dateKey=(d=new Date())=>d.toLocaleDateString("sv-SE");
+const blank=()=>({project:"내 첫 번째 작품",chapters:[{id:uid(),title:"1화. 시작",body:""}],characters:[],world:[],events:[],daily:{}});
+let db;try{db=JSON.parse(localStorage.getItem(KEY))||blank()}catch{db=blank()}
+let activeChapter=db.chapters[0]?.id||null,libType="characters",activeNote=null,month=new Date();
+let timer;
+function save(){ $("saveState").textContent="저장 중…";clearTimeout(timer);timer=setTimeout(()=>{localStorage.setItem(KEY,JSON.stringify(db));$("saveState").textContent="저장됨"},200)}
+function persistNow(){localStorage.setItem(KEY,JSON.stringify(db));$("saveState").textContent="저장됨"}
+function chars(s){return [...(s||"")].length}
+function current(){return db.chapters.find(c=>c.id===activeChapter)}
+function today(){return db.daily[dateKey()]||0}
+function total(){return db.chapters.reduce((n,c)=>n+chars(c.body),0)}
+function toast(s){let t=$("toast");t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2000)}
+function renderAll(){ $("projectName").textContent=db.project;renderChapters();renderEditor();renderGoal();renderNotes();renderEvents();renderStats(); }
+function renderChapters(){let root=$("chapterList");root.innerHTML="";if(!db.chapters.length){root.innerHTML='<div class="empty">회차가 없습니다.<br>새 회차를 추가해 주세요.</div>';return}db.chapters.forEach((c,i)=>{let el=document.createElement("div");el.className="chapter"+(c.id===activeChapter?" active":"");let b=document.createElement("b"),s=document.createElement("small");b.textContent=c.title||`${i+1}화`;s.textContent=chars(c.body)+"자";el.append(b,s);el.onclick=()=>{activeChapter=c.id;renderChapters();renderEditor()};root.append(el)})}
+function renderEditor(){let c=current();$("chapterTitle").value=c?.title||"";$("manuscript").value=c?.body||"";$("chapterTitle").disabled=$("manuscript").disabled=!c;$("chapterWords").textContent=chars(c?.body).toLocaleString()+"자"}
+function renderGoal(){let n=today();$("todayWords").textContent=n.toLocaleString();$("goalFill").style.width=Math.min(100,n/5000*100)+"%";$("goalText").textContent=n>=5000?"오늘의 목표를 달성했어요!":`오늘의 목표까지 ${(5000-n).toLocaleString()}자 남았어요.`}
+function addChapter(){let c={id:uid(),title:`${db.chapters.length+1}화`,body:""};db.chapters.push(c);activeChapter=c.id;persistNow();renderChapters();renderEditor();toast("새 회차를 추가했어요.")}
+$("newChapter").onclick=$("addChapterSmall").onclick=addChapter;
+$("chapterTitle").oninput=e=>{let c=current();if(c){c.title=e.target.value;save();renderChapters()}};
+$("manuscript").oninput=e=>{let c=current();if(!c)return;let old=chars(c.body),next=e.target.value,n=chars(next);if(n>old){let k=dateKey();db.daily[k]=(db.daily[k]||0)+(n-old)}c.body=next;$("chapterWords").textContent=n.toLocaleString()+"자";renderGoal();save();renderChapters()};
+$("deleteChapter").onclick=()=>{let c=current();if(!c)return;if(!confirm("이 회차를 삭제할까요?"))return;db.chapters=db.chapters.filter(x=>x.id!==c.id);activeChapter=db.chapters[0]?.id||null;persistNow();renderChapters();renderEditor()};
+$("downloadTxt").onclick=()=>{let c=current();if(!c)return;download(`${c.title||"원고"}.txt`,`${c.title}\n\n${c.body}`,"text/plain;charset=utf-8")};
+function download(name,data,type){let a=document.createElement("a"),url=URL.createObjectURL(new Blob([data],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function page(name){document.querySelectorAll(".page").forEach(p=>p.classList.add("hide"));$("page-"+name).classList.remove("hide");document.querySelectorAll(".nav").forEach(n=>n.classList.toggle("active",n.dataset.page===name));$("pageTitle").textContent=({write:"집필실",library:"설정 노트",timeline:"스토리 보드",stats:"통계와 캘린더",assistant:"AI 작업실",settings:"설정 및 백업"})[name];$("sidebar").classList.remove("open");if(name==="stats")renderStats()}
+document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>page(n.dataset.page));$("settingsBtn").onclick=()=>page("settings");$("menuBtn").onclick=()=>$("sidebar").classList.toggle("open");
+document.addEventListener("click",e=>{if(innerWidth<650&&!$("sidebar").contains(e.target)&&e.target!==$("menuBtn"))$("sidebar").classList.remove("open")});
+
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{libType=t.dataset.lib;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===t));$("libraryLabel").textContent=libType==="characters"?"등장인물":"세계관 노트";activeNote=null;renderNotes()});
+function notes(){return db[libType]}
+function renderNotes(){let root=$("noteList");root.innerHTML="";notes().forEach(n=>{let el=document.createElement("div");el.className="note-row"+(n.id===activeNote?" active":"");el.textContent=n.title||"제목 없음";el.onclick=()=>{activeNote=n.id;renderNotes();renderNoteEditor()};root.append(el)});if(!activeNote&&notes().length)activeNote=notes()[0].id;renderNoteEditor()}
+function renderNoteEditor(){let n=notes().find(x=>x.id===activeNote);$("noteTitle").value=n?.title||"";$("noteBody").value=n?.body||""}
+$("addNote").onclick=()=>{let n={id:uid(),title:libType==="characters"?"새 인물":"새 설정",body:""};notes().push(n);activeNote=n.id;persistNow();renderNotes();toast("노트를 추가했어요.")};
+$("noteTitle").oninput=e=>{let n=notes().find(x=>x.id===activeNote);if(n){n.title=e.target.value;save();renderNotes()}};
+$("noteBody").oninput=e=>{let n=notes().find(x=>x.id===activeNote);if(n){n.body=e.target.value;save()}};
+$("deleteNote").onclick=()=>{if(!activeNote)return;if(!confirm("이 노트를 삭제할까요?"))return;db[libType]=notes().filter(x=>x.id!==activeNote);activeNote=null;persistNow();renderNotes()};
+
+$("addEvent").onclick=()=>{let title=prompt("사건 또는 복선의 제목을 입력해 주세요.");if(!title?.trim())return;db.events.push({id:uid(),title:title.trim(),chapter:"",detail:"",status:"계획"});persistNow();renderEvents()};
+function renderEvents(){let root=$("eventList");root.innerHTML="";db.events.forEach(ev=>{let el=document.createElement("article");el.className="event";let top=document.createElement("div");top.className="event-top";let title=document.createElement("div");title.className="event-title";title.textContent=ev.title;let sel=document.createElement("select");["계획","진행 중","회수 완료"].forEach(v=>{let o=document.createElement("option");o.textContent=v;o.value=v;sel.append(o)});sel.value=ev.status;sel.onchange=()=>{ev.status=sel.value;save()};top.append(title,sel);let meta=document.createElement("small");meta.textContent=ev.chapter||"연결 회차 미지정";let detail=document.createElement("textarea");detail.value=ev.detail;detail.placeholder="사건 설명, 복선 내용, 회수할 시점…";detail.style.cssText="width:100%;min-height:65px;background:transparent;color:#cdd3e1;border:0;outline:0;resize:vertical;padding:8px 0;font:12px/1.7 inherit";detail.oninput=()=>{ev.detail=detail.value;save()};let input=document.createElement("input");input.placeholder="관련 회차 (예: 3화, 12화)";input.value=ev.chapter;input.style.cssText="background:#252b3c;border:1px solid #343b50;color:#cbd2e2;border-radius:6px;padding:7px;font-size:10px";input.oninput=()=>{ev.chapter=input.value;meta.textContent=ev.chapter||"연결 회차 미지정";save()};let del=document.createElement("button");del.textContent="삭제";del.className="tools";del.onclick=()=>{db.events=db.events.filter(x=>x.id!==ev.id);persistNow();renderEvents()};el.append(top,meta,input,detail,del);root.append(el)})}
+function renderStats(){let totalCh=db.chapters.length;$("sToday").textContent=today().toLocaleString()+"자";$("sTotal").textContent=total().toLocaleString()+"자";$("sChapters").textContent=totalCh+"화";let y=month.getFullYear(),m=month.getMonth();$("monthLabel").textContent=`${y}년 ${m+1}월`;let root=$("calendarGrid");root.innerHTML="";["일","월","화","수","목","금","토"].forEach(x=>{let d=document.createElement("div");d.className="cal-cell head";d.textContent=x;root.append(d)});let first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate();for(let i=0;i<first;i++){let e=document.createElement("div");e.className="cal-cell";root.append(e)}for(let day=1;day<=last;day++){let date=new Date(y,m,day),k=dateKey(date),n=db.daily[k]||0,e=document.createElement("div");e.className="cal-cell"+(k===dateKey()?" today":"");e.textContent=day;if(n){let em=document.createElement("em");em.textContent=n.toLocaleString()+"자";e.append(em)}root.append(e)}}
+$("prevMonth").onclick=()=>{month.setMonth(month.getMonth()-1);renderStats()};$("nextMonth").onclick=()=>{month.setMonth(month.getMonth()+1);renderStats()};
+$("backup").onclick=()=>download("novel-desk-backup.json",JSON.stringify(db,null,2),"application/json");
+$("restore").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let v=JSON.parse(r.result);if(!Array.isArray(v.chapters))throw Error();db=v;activeChapter=db.chapters[0]?.id||null;persistNow();renderAll();toast("백업을 복원했어요.")}catch{alert("올바른 NOVEL DESK 백업 파일이 아닙니다.")}};r.readAsText(f)};
+if("serviceWorker"in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("./sw.js").catch(()=>{});
+renderAll();

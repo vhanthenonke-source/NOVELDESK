@@ -1,0 +1,9 @@
+{
+  "name": "NOVEL DESK",
+  "short_name": "NOVEL DESK",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#10121a",
+  "theme_color": "#10121a",
+  "icons": []
+}
